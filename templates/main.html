@@ -1,11 +1,13 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Главная</title>
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <h1>HELLO!!!</h1>
+    <div class="container">
+        <h1>Добро пожаловать, {{ username }}!</h1>
+        <a href="/logout">Выйти</a>
+    </div>
 </body>
 </html>
