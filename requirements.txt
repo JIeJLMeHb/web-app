@@ -3,3 +3,5 @@ uvicorn
 jinja2
 pandas
 python-multipart
+bcrypt
+PyYAML>=6.0
