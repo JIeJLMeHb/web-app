@@ -1,5 +1,6 @@
 import uuid
 import pandas as pd
+import uvicorn
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,10 +9,15 @@ from fastapi.staticfiles import StaticFiles
 import bcrypt
 import logging
 import os
+import ssl
 
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ssl_context.load_cert_chain('security/cert.pem', keyfile='security/key.pem')
+
 logger = logging.getLogger(__name__)
 USERS = "users.csv"
 ADMIN_USERNAME = "admin"
@@ -25,15 +31,15 @@ def load_users():
     try:
         return pd.read_csv(USERS)
     except FileNotFoundError:
-        return pd.DataFrame(columns=["username", "password"])
+        return pd.DataFrame(columns=["username", "password", "role"])
 
-def save_user(username, password):
+def save_user(username, password, role="user"):
     df = load_users()
     username = username.strip()
     if username in df["username"].astype(str).str.strip().values:
         return False
     hashed_pw = bcrypt.hashpw(password.strip().encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    new_user = pd.DataFrame([[username, hashed_pw]], columns=["username", "password"])
+    new_user = pd.DataFrame([[username, hashed_pw, role]], columns=["username", "password", "role"])
     df = pd.concat([df, new_user], ignore_index=True)
     df.to_csv(USERS, index=False)
     return True
@@ -46,15 +52,20 @@ def check_user(username, password):
     if user_row.empty:
         return False
     stored_hash = user_row.iloc[0]["password"]
-    return bcrypt.checkpw(password.strip().encode("utf-8"), stored_hash.encode("utf-8"))
+    if bcrypt.checkpw(password.strip().encode("utf-8"), stored_hash.encode("utf-8")):
+        return user_row.iloc[0]["role"]
+    return False
+
 
 @app.get("/", response_class=HTMLResponse)
 def get_start_page(request: Request):
     session_id = request.cookies.get("session_id")
     if session_id in sessions and sessions[session_id]["expires"] > datetime.now():
         username = sessions[session_id]["username"]
-        return templates.TemplateResponse("main.html", {"request": request, "username": username})
+        role = sessions[session_id]["role"]
+        return templates.TemplateResponse("main.html", {"request": request, "username": username, "role": role})
     return RedirectResponse("/login")
+
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
@@ -62,10 +73,15 @@ def login_page(request: Request):
 
 @app.post("/login")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
-    if check_user(username, password):
+    role = check_user(username, password)
+    if role:
         session_id = str(uuid.uuid4())
-        sessions[session_id] = {"username": username, "expires": datetime.now() + SESSION_TTL}
-        logger.info(f"username:{username}, session expires {datetime.now() + SESSION_TTL}")
+        sessions[session_id] = {
+            "username": username,
+            "role": role,
+            "expires": datetime.now() + SESSION_TTL
+        }
+        logger.info(f"username:{username}, role:{role}, session expires {datetime.now() + SESSION_TTL}")
         response = RedirectResponse("/", status_code=302)
         response.set_cookie("session_id", session_id)
         return response
@@ -78,7 +94,7 @@ def register_page(request: Request):
     session_id = request.cookies.get("session_id")
     if not session_id or session_id not in sessions:
         return RedirectResponse("/login")
-    if sessions[session_id]["username"] != ADMIN_USERNAME:
+    if sessions[session_id]["role"] != "admin":
         raise HTTPException(status_code=403, detail="Доступ запрещен")
     return templates.TemplateResponse("register.html", {"request": request, "error": None})
 
@@ -87,10 +103,10 @@ def register(request: Request, username: str = Form(...), password: str = Form(.
     session_id = request.cookies.get("session_id")
     if not session_id or session_id not in sessions:
         return RedirectResponse("/login")
-    if sessions[session_id]["username"] != ADMIN_USERNAME:
+    if sessions[session_id]["role"] != "admin":
         raise HTTPException(status_code=403, detail="Доступ запрещен")
 
-    if save_user(username, password):
+    if save_user(username, password, role="user"):
         logger.info(f"Admin {sessions[session_id]['username']} registered new user: {username}")
         return RedirectResponse("/", status_code=302)
     return templates.TemplateResponse("register.html", {"request": request, "error": "Пользователь уже существует"})
@@ -105,19 +121,46 @@ def logout(request: Request):
     response.delete_cookie("session_id")
     return response
 
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page(request: Request):
+    session_id = request.cookies.get("session_id")
+    if not session_id or session_id not in sessions:
+        return RedirectResponse("/login")
+    if sessions[session_id]["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Доступ запрещен")
+
+    df = load_users()
+    users = df.to_dict(orient="records")
+
+    return templates.TemplateResponse("admin.html", {"request": request, "users": users})
+
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
     return templates.TemplateResponse(
         "404.html", {"request": request, "detail": "Custom 404 Not Found Page"}, status_code=404
     )
 
+@app.exception_handler(403)
+async def custom_404_handler(request: Request, exc: HTTPException):
+    return templates.TemplateResponse(
+        "403.html", {"request": request, "detail": "Custom 403 Forbidden Page"}, status_code=403
+    )
 
 def init_users_file():
     if not os.path.exists(USERS):
         admin_password = input("enter admin passwd:")
         hashed_pw = bcrypt.hashpw(admin_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-        df = pd.DataFrame([[ADMIN_USERNAME, hashed_pw]], columns=["username", "password"])
+        df = pd.DataFrame([[ADMIN_USERNAME, hashed_pw, "admin"]], columns=["username", "password", "role"])
         df.to_csv(USERS, index=False)
         logger.info(f"Created file {USERS} with admin (username='{ADMIN_USERNAME}')")
 
 init_users_file()
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=443,
+        ssl_certfile='security/cert.pem',
+        ssl_keyfile='security/key.pem',
+        log_config="logs/log_config.yaml"
+    )     

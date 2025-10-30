@@ -9,7 +9,7 @@
         <h1>Добро пожаловать, {{ username }}!</h1>
         <a href="/logout">Выйти</a>
 
-        {% if username == 'admin' %}
+        {% if role == 'admin' %}
         <hr>
         <h2>Добавить нового пользователя</h2>
         <form action="/register" method="post">

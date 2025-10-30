@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Админ-панель</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Админ-панель</h1>
+    <p>Список пользователей:</p>
+    <table border="1">
+        <tr>
+            <th>Имя</th>
+            <th>Роль</th>
+        </tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.username }}</td>
+            <td>{{ user.role }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <br>
+    <a href="/register">Добавить пользователя</a> |
+    <a href="/">На главную</a> |
+    <a href="/logout">Выйти</a>
+</body>
+</html>

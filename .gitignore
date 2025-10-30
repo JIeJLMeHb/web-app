@@ -3,3 +3,7 @@ __pycache__
 logs/access.log
 logs/app.log
 users.csv
+.env
+security/cert.pem
+security/key.pem
+instructoin.txt
