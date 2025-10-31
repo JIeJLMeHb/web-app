@@ -23,5 +23,11 @@
         </form>
         {% endif %}
     </div>
+<script src="/static/session.js"></script>
+<script>
+    const ttl = {{ ttl|tojson }};
+    initSessionTimer(ttl);
+</script>
+
 </body>
 </html>
