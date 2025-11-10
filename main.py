@@ -121,7 +121,17 @@ def register(request: Request, username: str = Form(...), password: str = Form(.
 
     if save_user(username, password, role="user"):
         logger.info(f"Admin {session['username']} registered new user: {username}")
-        return RedirectResponse("/", status_code=302)
+        ttl_seconds = int((session["expires"] - datetime.now()).total_seconds())
+        return templates.TemplateResponse(
+            "main.html",
+            {
+                "request": request,
+                "username": session["username"],
+                "role": session["role"],
+                "ttl": ttl_seconds,
+                "alert": f"Пользователь {username} успешно добавлен!"
+            }
+        )
     return templates.TemplateResponse("register.html", {"request": request, "error": "Пользователь уже существует"})
 
 @app.get("/logout")

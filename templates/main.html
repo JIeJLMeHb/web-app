@@ -6,8 +6,10 @@
 </head>
 <body>
     <div class="container">
-        <h1>Добро пожаловать, {{ username }}!</h1>
-        <a href="/logout">Выйти</a>
+        <h1 class="Userlogged">Добро пожаловать, {{ username }}!</h1>
+            <form action="/logout">
+                <button type="submit">Выйти</button>
+            </form>
 
         {% if role == 'admin' %}
         <hr>
@@ -24,6 +26,11 @@
         {% endif %}
     </div>
 <script src="/static/session.js"></script>
+{% if alert %}
+<script>
+    alert("{{ alert }}");
+</script>
+{% endif %}
 <script>
     const ttl = {{ ttl|tojson }};
     initSessionTimer(ttl);
